@@ -4,6 +4,12 @@
 idempotent schema changes to the configured SQLite database on every startup.
 Migrations must preserve existing rows and remain safe to run more than once.
 
+The deterministic seed workflow in `seedDeterministic.ts` is a development
+reset, not a migration. It atomically clears campaign-owned comments,
+notifications, events, pledges, webhook failures, and campaigns before
+inserting its fixed fixtures. It must delete dependent rows before campaigns
+and must not be used against production data.
+
 ## Ownership and invariants
 
 - `campaigns` owns campaign lifecycle state. `pledged_amount` is the cached

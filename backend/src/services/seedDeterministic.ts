@@ -163,39 +163,45 @@ export function seedDeterministicState(count: number = BASE_CAMPAIGNS.length): s
 
   const { campaigns, pledges } = buildSeedSet(count);
 
-  db.prepare(`DELETE FROM campaign_events`).run();
-  db.prepare(`DELETE FROM pledges`).run();
-  db.prepare(`DELETE FROM campaigns`).run();
+  db.transaction(() => {
+    // Clear campaign-owned state before deleting campaigns because foreign keys are enabled.
+    db.prepare(`DELETE FROM notifications`).run();
+    db.prepare(`DELETE FROM campaign_comments`).run();
+    db.prepare(`DELETE FROM campaign_events`).run();
+    db.prepare(`DELETE FROM pledges`).run();
+    db.prepare(`DELETE FROM webhook_dead_letter_queue`).run();
+    db.prepare(`DELETE FROM campaigns`).run();
 
-  const insertCampaign = db.prepare(
-    `INSERT INTO campaigns (
-      id, creator, title, description, accepted_tokens_json, target_amount, pledged_amount, deadline, created_at, claimed_at, metadata_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-  );
-
-  for (const campaign of campaigns) {
-    insertCampaign.run(
-      campaign.id,
-      campaign.creator,
-      campaign.title,
-      campaign.description,
-      JSON.stringify([campaign.assetCode]),
-      campaign.targetAmount,
-      campaign.pledgedAmount,
-      campaign.deadline,
-      campaign.createdAt,
-      campaign.claimedAt,
+    const insertCampaign = db.prepare(
+      `INSERT INTO campaigns (
+        id, creator, title, description, accepted_tokens_json, target_amount, pledged_amount, deadline, created_at, claimed_at, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
     );
-  }
 
-  const insertPledge = db.prepare(
-    `INSERT INTO pledges (campaign_id, contributor, amount, asset_code, created_at, refunded_at, transaction_hash)
-     VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
-  );
+    for (const campaign of campaigns) {
+      insertCampaign.run(
+        campaign.id,
+        campaign.creator,
+        campaign.title,
+        campaign.description,
+        JSON.stringify([campaign.assetCode]),
+        campaign.targetAmount,
+        campaign.pledgedAmount,
+        campaign.deadline,
+        campaign.createdAt,
+        campaign.claimedAt,
+      );
+    }
 
-  for (const pledge of pledges) {
-    insertPledge.run(pledge.campaignId, pledge.contributor, pledge.amount, pledge.assetCode, pledge.createdAt);
-  }
+    const insertPledge = db.prepare(
+      `INSERT INTO pledges (campaign_id, contributor, amount, asset_code, created_at, refunded_at, transaction_hash)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL)`,
+    );
+
+    for (const pledge of pledges) {
+      insertPledge.run(pledge.campaignId, pledge.contributor, pledge.amount, pledge.assetCode, pledge.createdAt);
+    }
+  })();
 
   return campaigns.map((c) => c.id);
 }

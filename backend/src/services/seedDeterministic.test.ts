@@ -48,4 +48,26 @@ describe('deterministic seed state', () => {
     expect(secondCampaigns).toEqual(firstCampaigns);
     expect(secondPledges).toEqual(firstPledges);
   });
+
+  it('clears campaign-owned state before reseeding', () => {
+    const db = getDb();
+    db.prepare(
+      `INSERT INTO campaign_comments (campaign_id, author, content, created_at)
+       VALUES (?, ?, ?, ?)`,
+    ).run('1', `G${'F'.repeat(55)}`, 'stale comment', 1_750_000_100);
+    db.prepare(
+      `INSERT INTO notifications (campaign_id, type, title, body, target_wallet, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('1', 'new_pledge', 'stale notification', 'stale body', `G${'F'.repeat(55)}`, 1_750_000_100);
+    db.prepare(
+      `INSERT INTO webhook_dead_letter_queue (event, campaign_id, payload, failed_at, attempts)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run('pledge.created', '1', '{}', 1_750_000_100, 1);
+
+    seedDeterministicState();
+
+    expect(db.prepare('SELECT COUNT(*) AS count FROM campaign_comments').get()).toEqual({ count: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM notifications').get()).toEqual({ count: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM webhook_dead_letter_queue').get()).toEqual({ count: 0 });
+  });
 });
